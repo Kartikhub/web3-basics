@@ -1,6 +1,5 @@
-import { Wallet } from "@project-serum/anchor";
-import { bs58 } from "@project-serum/anchor/dist/cjs/utils/bytes";
-import { Connection, Keypair } from "@solana/web3.js";
+import bs58 from "bs58";
+import { Connection, Keypair, VersionedTransaction } from "@solana/web3.js";
 import axios from "axios";
 
 const JUPITER_BASE_URL = "https://quote-api.jup.ag/v6/";
@@ -28,9 +27,31 @@ export async function fetchSwapQuote() {
     const { data: { swapTransaction } } = await (
       await axios.post(JUPITER_BASE_URL + 'swap', requestBody) );
 
-  console.log("Swap Transaction is : " + swapTransaction);
+    console.log("Swap Transaction is : " + swapTransaction);
+    const swapTrxnBuf = Buffer.from(swapTransaction, 'base64');
+    console.log("Swap Buf: " + swapTrxnBuf);
+    
+    var transaction = VersionedTransaction.deserialize(swapTrxnBuf);
+
+    console.log(transaction);
+
+    transaction.sign([wallet]);
+    console.log('1');
+
+    const rawTransaction = transaction.serialize();
+
+    const transactionId = await connection.sendRawTransaction(rawTransaction, {
+      skipPreflight: true,
+      maxRetries: 2
+    });
+    
+    console.log('2');
+    await connection.confirmTransaction(transactionId);
+    console.log('3');
+    console.log(`https://solscan.io/tx/${transactionId}`);
   } catch (err) {
     console.log(err);
   }
+
 
 }
