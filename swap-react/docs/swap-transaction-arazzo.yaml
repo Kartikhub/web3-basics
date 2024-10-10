@@ -1,0 +1,169 @@
+arazzo: 1.0.0
+info:
+  title: Swap Tokens 
+  version: 1.0.0
+  description: >-
+    Illustrates a workflow whereby a user 
+    a) gets a quote for the provided tokens, 
+    b) swap the tokens
+sourceDescriptions:
+  - name: jupiterApi
+    url: ./quoteV6.yaml
+    type: openapi
+workflows:
+  - workflowId: swap-token
+    summary: swap tokens 
+    description: >- 
+      This is how user can get quotes for the tokens to swap and create a transaction to swap these tokens
+    inputs:
+      type: object
+      properties:
+        user_public_key:
+          type: string
+    steps:
+      - stepId: get-quote
+        operationId: jupiterApi.getQuote 
+        parameters:
+          - reference: '#/components/parameters/InputMintParameter'
+          - reference: '#/components/parameters/OutputMintParameter'
+          - reference: '#/components/parameters/AmountParameter'
+          - reference: '#/components/parameters/SlippageParameter'
+          - reference: '#/components/parameters/SwapModeParameter'
+          - reference: '#/components/parameters/DexesParameter'
+          - reference: '#/components/parameters/ExcludeDexesParameter'
+          - reference: '#/components/parameters/RestrictIntermediateTokensParameter'
+          - reference: '#/components/parameters/OnlyDirectRoutesParameter'
+          - reference: '#/components/parameters/AsLegacyTransactionParameter'
+          - reference: '#/components/parameters/PlatformFeeBpsParameter'
+          - reference: '#/components/parameters/MaxAccountsParameter'
+          - reference: '#/components/parameters/AutoSlippageParameter'
+          - reference: '#/components/parameters/MaxAutoSlippageParameter'
+          - reference: '#/components/parameters/AutoSlippageCollisionUsdValueParameter'
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          quote_response: $response.body
+        onSuccess:
+          - name: desiredQuoteFound
+            type: goto
+            stepId: swap-transaction
+            criteria:
+              - condition: $statusCode == 200
+              - context: $response.body
+                type: jsonpath
+      - stepId: swap-transaction
+        description: Returns a transaction that you can use from the quote you get from `/quote`.
+        operationId: jupiterApi.createSwapTransaction
+        requestBody:
+          payload: |
+            {
+              "quoteResponse": "{$steps.get-quote.outputs.quote_response}",
+              "userPublicKey": "{$inputs.user_public_key}"
+            }
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          transaction_respone: $response.body
+    outputs:
+      transaction: $steps.swap-transaction.outputs.transaction_response
+components:
+  parameters:
+    InputMintParameter:
+      name: inputMint
+      description: Input token mint address
+      in: query
+      required: true
+      schema:
+        type: string
+    OutputMintParameter:
+      name: outputMint
+      description: Output token mint address
+      in: query
+      required: true
+      schema:
+        type: string
+    AmountParameter:
+      name: amount
+      description: The amount to swap, have to factor in the token decimals.
+      in: query
+      required: true
+      schema:
+        type: integer
+    SlippageParameter:
+      name: slippageBps
+      description: Default is 50 unless `autoSlippage` is set to `true`. The slippage % in BPS. If the output token amount exceeds the slippage then the swap transaction will fail.
+      in: query
+      schema:
+        type: integer
+    SwapModeParameter:
+      name: swapMode
+      description: (ExactIn or ExactOut) Defaults to ExactIn. ExactOut is for supporting use cases where you need an exact token amount, like payments. In this case the slippage is on the input token.
+      in: query
+      schema:
+        type: string
+        enum: ['ExactIn', 'ExactOut']
+    DexesParameter:
+      name: dexes
+      description: Default is that all DEXes are included. You can pass in the DEXes that you want to include only and separate them by `,`. You can check out the full list [here](https://quote-api.jup.ag/v6/program-id-to-label).
+      in: query
+      schema:
+        type: array
+        items:
+          type: string
+    ExcludeDexesParameter:
+      name: excludeDexes
+      description: Default is that all DEXes are included. You can pass in the DEXes that you want to exclude and separate them by `,`. You can check out the full list [here](https://quote-api.jup.ag/v6/program-id-to-label).
+      in: query
+      schema:
+        type: array
+        items:
+          type: string
+    RestrictIntermediateTokensParameter:
+      name: restrictIntermediateTokens
+      description: Restrict intermediate tokens to a top token set that has stable liquidity. This will help to ease potential high slippage error rate when swapping with minimal impact on pricing.
+      in: query
+      schema:
+        type: boolean
+    OnlyDirectRoutesParameter:
+      name: onlyDirectRoutes
+      description: Default is false. Direct Routes limits Jupiter routing to single hop routes only.
+      in: query
+      schema:
+        type: boolean
+    AsLegacyTransactionParameter:
+      name: asLegacyTransaction
+      description: Default is false. Instead of using versioned transaction, this will use the legacy transaction.
+      in: query
+      schema:
+        type: boolean
+    MaxAccountsParameter:
+      name: maxAccounts
+      description: Rough estimate of the max accounts to be used for the quote, so that you can compose with your own accounts
+      in: query
+      schema:
+        type: integer
+    PlatformFeeBpsParameter:
+      name: platformFeeBps
+      description: If you want to charge the user a fee, you can specify the fee in BPS. Fee % is taken out of the output token.
+      in: query
+      schema:
+        type: integer
+    AutoSlippageParameter:
+      name: autoSlippage
+      description: Default is false. By setting this to `true`, our API will suggest smart slippage info that you can use. `computedAutoSlippage` is the computed result, and `slippageBps` is what we suggest you to use. Additionally, you should check out `maxAutoSlippageBps` and `autoSlippageCollisionUsdValue`.
+      in: query
+      schema:
+        type: boolean
+    MaxAutoSlippageParameter:
+      name: maxAutoSlippageBps
+      description: In conjunction with `autoSlippage=true`, the maximum `slippageBps` returned by the API will respect this value. It is recommended that you set something here.
+      in: query
+      schema:
+        type: integer
+    AutoSlippageCollisionUsdValueParameter:
+      name: autoSlippageCollisionUsdValue
+      description: If `autoSlippage` is set to `true`, our API will use a default `1000` USD value as way to calculate the slippage impact for the smart slippage. You can set a custom USD value using this parameter.
+      in: query
+      schema:
+        type: integer
+
